@@ -2,7 +2,6 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from pyzbar.pyzbar import decode
 from PIL import Image
 from io import BytesIO
 import xml.etree.ElementTree as ET
@@ -10,6 +9,7 @@ import re
 import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
+import cv2
 
 def weight_curve(x, total_dist):
     x_rel = x / total_dist
@@ -18,11 +18,12 @@ def weight_curve(x, total_dist):
     return rising * falling
 
 def decode_qr(uploaded_image):
-    image = Image.open(uploaded_image)
-    decoded_objects = decode(image)
-    if not decoded_objects:
-        return None
-    return decoded_objects[0].data.decode("utf-8")
+    image = Image.open(uploaded_image).convert("RGB")
+    img_np = np.array(image)
+    img_cv = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+    detector = cv2.QRCodeDetector()
+    data, _, _ = detector.detectAndDecode(img_cv)
+    return data if data else None
 
 def parse_gpx_coords(qr_data):
     try:
@@ -40,7 +41,7 @@ def compute_task_distance(coords):
     dists = [geodesic(coords[i], coords[i+1]).km for i in range(len(coords)-1)]
     return sum(dists)
 
-st.title("XCTrack QR → Max Lead Zone with Map")
+st.title("XCTrack QR → Max Lead Zone with Map (OpenCV QR)")
 
 uploaded_image = st.file_uploader("Upload QR-code from XCTrack", type=["png", "jpg", "jpeg"])
 coords = []
