@@ -1,47 +1,37 @@
+
 import streamlit as st
 import cv2
 import numpy as np
-import base64
+from PIL import Image
 import xml.etree.ElementTree as ET
 from io import BytesIO
-from PIL import Image
-import matplotlib.pyplot as plt
-
-def decode_qr_opencv(image: Image.Image) -> str:
-    np_image = np.array(image.convert("RGB"))
-    detector = cv2.QRCodeDetector()
-    data, _, _ = detector.detectAndDecode(np_image)
-    return data
-
-def parse_gpx_from_text(text: str):
-    try:
-        root = ET.fromstring(text)
-        wpts = root.findall(".//{http://www.topografix.com/GPX/1/1}wpt")
-        points = []
-        for wpt in wpts:
-            lat = float(wpt.attrib["lat"])
-            lon = float(wpt.attrib["lon"])
-            name = wpt.find("{http://www.topografix.com/GPX/1/1}name")
-            points.append((lat, lon, name.text if name is not None else ""))
-        return points
-    except:
-        return None
 
 st.title("QR GPX Parser with OpenCV")
 
 uploaded_file = st.file_uploader("Upload QR-code from XCTrack", type=["png", "jpg", "jpeg"])
-
 if uploaded_file:
     image = Image.open(uploaded_file)
-    qr_text = decode_qr_opencv(image)
-    if qr_text:
+    img_array = np.array(image)
+
+    detector = cv2.QRCodeDetector()
+    data, bbox, _ = detector.detectAndDecode(img_array)
+
+    if data:
         st.success("QR detected.")
-        gpx_points = parse_gpx_from_text(qr_text)
-        if gpx_points:
-            st.success(f"Parsed {len(gpx_points)} waypoints.")
-            for lat, lon, name in gpx_points:
-                st.write(f"📍 {name}: {lat}, {lon}")
+        if "<gpx" in data:
+            try:
+                root = ET.fromstring(data)
+                waypoints = root.findall(".//{http://www.topografix.com/GPX/1/1}rtept")
+                st.success(f"Parsed {len(waypoints)} waypoints from GPX.")
+                for i, wpt in enumerate(waypoints):
+                    lat = wpt.attrib["lat"]
+                    lon = wpt.attrib["lon"]
+                    name = wpt.find("{http://www.topografix.com/GPX/1/1}name").text if wpt.find("{http://www.topografix.com/GPX/1/1}name") is not None else "N/A"
+                    st.markdown(f"**{i+1}. {name}** — {lat}, {lon}")
+            except Exception as e:
+                st.error(f"Failed to parse GPX: {e}")
         else:
-            st.error("QR detected but could not parse GPX waypoints.")
+            st.error("QR detected but does not contain GPX data.")
     else:
         st.error("No QR code detected.")
+    
